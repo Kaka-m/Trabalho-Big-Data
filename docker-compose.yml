@@ -1,3 +1,23 @@
-version: '3.8'
-
 services:
+
+  log-generator:
+    image: python:3.10-slim
+    container_name: log-generator
+    volumes:
+      - ./app:/app
+      - ./flume/logs:/opt/flume/logs
+    working_dir: /app
+    command: python -u gerador.py
+    restart: always
+
+  flume-agent:
+    image: probablyfine/flume:latest
+    container_name: flume-agent
+    environment:
+      - 'FLUME_AGENT_NAME=agente_python'
+    volumes:
+      - ./flume/conf:/opt/flume-config
+      - ./flume/logs:/opt/flume/logs
+    depends_on:
+      - log-generator
+    restart: always 
