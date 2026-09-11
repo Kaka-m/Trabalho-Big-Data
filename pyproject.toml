@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "projeto_big_data"
+version = "0.1.0"
+description = "Pipeline de ingestão, processamento e análise de dados em larga escala."
+authors = [
+    { name = "Wyllian", email = "seu_email@exemplo.com" }
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+dependencies = [
+    "pandas",
+    "numpy",
+    "pyarrow",
+    "fastapi",
+    "pytest"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
