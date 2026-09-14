@@ -1,11 +1,13 @@
+SET 'classloader.resolve-order' = 'parent-first';
+
 CREATE TABLE events (
-  timestamp STRING,
+  `timestamp` TIMESTAMP(3),
   metodo STRING,
   endpoint STRING,
   status INT,
   tempo_resposta_ms INT,
   ip_origem STRING,
-  WATERMARK FOR timestamp AS CAST(timestamp AS TIMESTAMP(3)) - INTERVAL '30' SECOND
+  WATERMARK FOR `timestamp` AS `timestamp` - INTERVAL '30' SECOND
 ) WITH (
   'connector' = 'kafka',
   'topic' = 'events',
@@ -27,14 +29,16 @@ CREATE TABLE trend_topics_result (
 
 INSERT INTO trend_topics_result
 SELECT
-  TUMBLE_START(ts, INTERVAL '10' MINUTES) AS window_start,
-  TUMBLE_END(ts, INTERVAL '10' MINUTES) AS window_end,
+  window_start,
+  window_end,
   endpoint,
   COUNT(*) AS cnt
-FROM (
-  SELECT
-    CAST(timestamp AS TIMESTAMP(3)) AS ts,
-    endpoint
-  FROM events
+FROM TABLE(
+  HOP(
+    TABLE events,
+    DESCRIPTOR(`timestamp`),
+    INTERVAL '1' MINUTE,
+    INTERVAL '10' MINUTES
+  )
 )
-GROUP BY TUMBLE(ts, INTERVAL '10' MINUTES), endpoint;
+GROUP BY window_start, window_end, endpoint;
