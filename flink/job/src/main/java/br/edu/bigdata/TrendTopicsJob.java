@@ -8,16 +8,24 @@ import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
+import org.apache.flink.connector.kafka.sink.KafkaSink;
+import org.apache.flink.connector.kafka.sink.KafkaRecordSerializationSchema;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.SlidingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.util.Collector;
+import org.apache.flink.util.OutputTag;
 
 public class TrendTopicsJob {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final OutputTag<Event> LATE_EVENTS = new OutputTag<Event>("late-events") {
+    };
 
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment environment = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -40,11 +48,20 @@ public class TrendTopicsJob {
                 .filter(event -> event != null && event.endpoint != null)
                 .assignTimestampsAndWatermarks(watermarks);
 
-        events.keyBy(event -> event.endpoint)
+        KafkaSink<String> resultSink = kafkaSink("trend-topics-result");
+        KafkaSink<String> lateEventsSink = kafkaSink("trend-topics-late-events");
+
+        SingleOutputStreamOperator<String> trends = events.keyBy(event -> event.endpoint)
                 .window(SlidingEventTimeWindows.of(Time.minutes(10), Time.minutes(1)))
-                .aggregate(new CountEvents(), new FormatTrend())
-                .name("trend-topics-by-endpoint")
-                .print();
+            .sideOutputLateData(LATE_EVENTS)
+            .aggregate(new CountEvents(), new FormatTrend())
+            .name("trend-topics-by-endpoint");
+
+        trends.sinkTo(resultSink).name("trend-topics-result");
+        trends.getSideOutput(LATE_EVENTS)
+            .map(TrendTopicsJob::formatLateEvent)
+            .sinkTo(lateEventsSink)
+            .name("trend-topics-late-events");
 
         environment.execute("trend-topics-watermarks");
     }
@@ -54,6 +71,25 @@ public class TrendTopicsJob {
             return JSON.readValue(value, Event.class);
         } catch (Exception ignored) {
             return null;
+        }
+    }
+
+    private static KafkaSink<String> kafkaSink(String topic) {
+        return KafkaSink.<String>builder()
+                .setBootstrapServers("kafka:9092")
+                .setRecordSerializer(KafkaRecordSerializationSchema.builder()
+                        .setTopic(topic)
+                        .setValueSerializationSchema(new SimpleStringSchema())
+                        .build())
+                .setDeliveryGuarantee(DeliveryGuarantee.NONE)
+                .build();
+    }
+
+    private static String formatLateEvent(Event event) {
+        try {
+            return JSON.writeValueAsString(event);
+        } catch (Exception ignored) {
+            return "{\"reason\":\"event_late\",\"endpoint\":\"unknown\"}";
         }
     }
 
