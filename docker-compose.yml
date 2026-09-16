@@ -1,0 +1,22 @@
+version: '3'
+services:
+  jobmanager:
+    image: flink:latest
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+
+  taskmanager:
+    image: flink:latest
+    command: taskmanager
+    depends_on:
+      - jobmanager
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=jobmanager
+
+  kafka:
+    image: bitnami/kafka:latest
+    ports:
+      - "9092:9092"

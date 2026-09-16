@@ -1,0 +1,5 @@
+apache-flink
+streamlit
+pandas
+kafka-python
+pyflink
