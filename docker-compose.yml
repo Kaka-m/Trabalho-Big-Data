@@ -23,7 +23,7 @@ services:
     depends_on:
       - zookeeper
     ports:
-      - "9092:9092"
+      - "19092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -131,6 +131,53 @@ services:
       - ./hadoop/conf/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
       - ./hadoop/conf/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
 
+
+  hive-metastore:
+    image: apache/hive:3.1.3
+    container_name: hive-metastore
+    hostname: hive-metastore
+    environment:
+      SERVICE_NAME: metastore
+      # Metastore embutido (Derby) para simplificar o trabalho; em
+      # producao seria Postgres/MySQL.
+      DB_DRIVER: derby
+    ports:
+      - "19083:9083"
+    volumes:
+      - hive_warehouse:/opt/hive/data/warehouse
+      - ./hadoop/conf/core-site.xml:/opt/hadoop/conf/core-site.xml
+      - ./hadoop/conf/hdfs-site.xml:/opt/hadoop/conf/hdfs-site.xml
+    depends_on:
+      - namenode
+    restart: unless-stopped
+
+  hbase:
+    image: dajobe/hbase:latest
+    container_name: hbase
+    hostname: hbase
+    ports:
+      - "16010:16010"
+      - "19090:9090"
+    restart: unless-stopped
+
+  spark:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    image: trabalho-big-data/spark:3.5.1-hbase-hive
+    container_name: spark
+    hostname: spark
+    ports:
+      - "4040:4040"   # UI do job Spark quando estiver rodando
+    volumes:
+      - ./spark/job:/opt/spark-app
+    depends_on:
+      - namenode
+      - kafka
+      - hive-metastore
+      - hbase
+    restart: unless-stopped
 volumes:
   namenode_data:
   datanode_data:
+  hive_warehouse:
